@@ -10,7 +10,8 @@ const uint8_t ledButton = 19;
 #define NUM_LEDS 110 // Define the number of LEDs in your strip
 short brightness;
 unsigned long previousMillis = 0;
-const long interval = 1000; // Interval in milliseconds (1 second)
+const long interval = 5000; // Interval in milliseconds (1 second)
+float lastTempReading = 0.0;
 
 CRGB leds[NUM_LEDS];
 
@@ -92,22 +93,26 @@ void SensorUpdate()
 {
     sensors.requestTemperatures(); 
     float temperatureC = sensors.getTempCByIndex(0); // Read temperature in Celsius
-
-    String temperatureString = String(temperatureC, 1);
-    String output = "Temp: " + temperatureString + " C";
-    char charArray[output.length() + 1];
-    output.toCharArray(charArray, output.length() + 1);
-    LCDPrint(0, end, charArray);
+	if(lastTempReading != temperatureC)
+	{
+		String temperatureString = String(temperatureC, 1);
+		String output = "Temp: " + temperatureString + " C";
+		char charArray[output.length() + 1];
+		output.toCharArray(charArray, output.length() + 1);
+		LCDPrint(0, end, charArray);
+		lastTempReading = temperatureC;
+	}
+    
 }
 
-void setColor(short r, short g, short b)
+void SetColor(short r, short g, short b)
 {
     // Fill the LED strip with a color (e.g., red)
     fill_solid(leds, NUM_LEDS, CRGB(r, g, b));
     FastLED.show();
 }
 
-void setBrightness(short brightnessLevel)
+void SetBrightness(short brightnessLevel)
 {
     // Set the brightness level (0-255, where 0 is off and 255 is full brightness)
     FastLED.setBrightness(brightnessLevel); // Adjust this value to set the brightness level
@@ -117,7 +122,7 @@ void setBrightness(short brightnessLevel)
 void LightsOff()
 {
 	Serial.println("Lights are On, switching off now");
-	setBrightness(0);
+	SetBrightness(0);
 	lcd.clear();
 	lcd.noBacklight();		
 	LCDBacklight = false;
@@ -126,10 +131,12 @@ void LightsOff()
 void LightsOn()
 {
 	Serial.println("Lights are Off, switching on now");
-	setColor(255, 0, 155);
-	setBrightness(255);
+	SetColor(255, 0, 155);
+	SetBrightness(255);
 	lcd.backlight(); // Turn on the backlight
 	LCDBacklight = true;
+	delay(100);
+	SensorUpdate();
 }
 
 void toggleLights() {
