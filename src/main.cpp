@@ -3,6 +3,14 @@
 #include <LiquidCrystal_I2C.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <FastLED.h>
+
+const uint8_t ledPin = 26;
+const uint8_t ledButton = 19;
+#define NUM_LEDS 110 // Define the number of LEDs in your strip
+short brightness;
+
+CRGB leds[NUM_LEDS];
 
 #define ONE_WIRE_BUS 5 // Pin connected to DS18B20 data line
 
@@ -88,10 +96,34 @@ void SensorUpdate()
     LCDPrint(0, end, charArray);
 }
 
-// ------ ############################################################ ------ //
-// ------ ############################################################ ------ //
-// ------ ############################################################ ------ //
+void setColor(short r, short g, short b)
+{
+    // Fill the LED strip with a color (e.g., red)
+    fill_solid(leds, NUM_LEDS, CRGB(r, g, b));
+    FastLED.show();
+}
 
+void setBrightness(short brightnessLevel)
+{
+    // Set the brightness level (0-255, where 0 is off and 255 is full brightness)
+    FastLED.setBrightness(brightnessLevel); // Adjust this value to set the brightness level
+    FastLED.show();
+}
+
+void toggleLights() {
+    if (FastLED.getBrightness() > 0) {
+        Serial.println("Lights are On, switching off now");
+        setBrightness(0);
+    } else {
+        Serial.println("Lights are Off, switching on now");
+        setColor(255, 0, 155);
+        setBrightness(255);
+    }
+}
+
+// ------ ############################################################ ------ //
+// ------ ############################################################ ------ //
+// ------ ############################################################ ------ //
 
 void setup() {
     Wire.begin();
@@ -104,13 +136,21 @@ void setup() {
 
 	delay(1000);
     lcd.clear();
+
+	pinMode(ledButton, INPUT_PULLUP);
+	FastLED.addLeds<WS2812B, ledPin, GRB>(leds, NUM_LEDS);
+	fill_solid(leds, NUM_LEDS, CRGB(0, 0, 0));
+	FastLED.show();
 }
 
 // ------ ############################################################ ------ //
 
-
 void loop() {
 	SensorUpdate();
+	if(digitalRead(ledButton) == LOW)
+	{
+		toggleLights();
+	}
     delay(1000); 
 }
 
