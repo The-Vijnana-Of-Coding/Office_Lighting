@@ -6,13 +6,16 @@
 #include <FastLED.h>
 #include <WiFi.h>
 
-const char* ssid = "ESP32-AP";
-const char* password = "password"; // Change to suit your needs!
+const char* ssid = "your-ssid";
+const char* password = "your-password";
+const int ledButton = 19;
 
-WiFiServer server(80);
+WiFiUDP udp;
+IPAddress broadcastIP(255, 255, 255, 255); // Broadcast IP address
+
+int buttonState = HIGH; // Initialize button state
 
 const uint8_t ledPin = 26;
-const uint8_t ledButton = 19;
 #define NUM_LEDS 110 // Define the number of LEDs in your strip
 short brightness;
 unsigned long previousMillis = 0;
@@ -145,12 +148,19 @@ void LightsOn()
 	SensorUpdate();
 }
 
-void toggleLights() {
-    if (FastLED.getBrightness() > 0) {
-        LightsOff();
-    } else {
+void toggleLights(int state) {
+    if (state) {
         LightsOn();
+    } else {
+        LightsOff();
     }
+}
+
+void broadcastButtonState(int state) {
+    // Broadcast button state to other devices
+    udp.beginPacket(broadcastIP, 12345);
+    udp.write(state);
+    udp.endPacket();
 }
 
 // ------ ############################################################ ------ //
@@ -164,14 +174,14 @@ void setup() {
 	LCDStart();
 	LCDBootScreen();
 
-	// Set up WiFi access point
-	WiFi.softAP(ssid, password);
-	
-	IPAddress IP = WiFi.softAPIP();
-	Serial.print("AP IP address: ");
-	Serial.println(IP);
-	
-	server.begin();
+	// Connect to WiFi network
+    Serial.println();
+    Serial.println("Setting up Access Point...");
+    WiFi.softAP(ssid, password);
+    Serial.println("AP IP address: " + WiFi.softAPIP().toString());
+
+    // Begin UDP communication
+    udp.begin(12345); // Choose a UDP port
 
     sensors.begin(); 
 
@@ -185,20 +195,6 @@ void setup() {
 // ------ ############################################################ ------ //
 
 void loop() {
-	// Wait for a client to connect
-	WiFiClient client = server.available();
-	
-	if (client) {
-		Serial.println("Client connected");
-		
-		// Send data to the client
-		client.print("Hello from ESP32 AP");
-		
-		// Close the connection
-		client.stop();
-		Serial.println("Client disconnected");
-	}
-	
 	unsigned long currentMillis = millis();
 
     // Check if it's time to update the sensor readings
@@ -210,10 +206,13 @@ void loop() {
 		}
     }
 
-    // Check if the LED button is pressed
-    if (digitalRead(ledButton) == LOW) {
-        toggleLights();
-        delay(250); // Add a small delay to debounce the button
+    int newButtonState = digitalRead(ledButton);
+    if (newButtonState != buttonState) {
+        // Button state has changed
+        buttonState = newButtonState;
+        broadcastButtonState(buttonState);
+        toggleLights(buttonState);
+        delay(250); // Debounce the button
     }
 }
 
