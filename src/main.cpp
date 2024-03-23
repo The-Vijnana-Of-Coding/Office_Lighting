@@ -9,9 +9,10 @@
 const char* ssid = "your-ssid";
 const char* password = "your-password";
 const int ledButton = 19;
+const int udpPort = 12345; // UDP port used for communication
+IPAddress broadcastIP(255, 255, 255, 255); // Broadcast IP address
 
 WiFiUDP udp;
-IPAddress broadcastIP(255, 255, 255, 255); // Broadcast IP address
 
 int buttonState = HIGH; // Initialize button state
 
@@ -131,29 +132,21 @@ void SetBrightness(short brightnessLevel)
 void LightsOff()
 {
 	Serial.println("Lights are On, switching off now");
+	LCDBacklight = false;
 	SetBrightness(0);
 	lcd.clear();
 	lcd.noBacklight();		
-	LCDBacklight = false;
 }
 
 void LightsOn()
 {
 	Serial.println("Lights are Off, switching on now");
+	LCDBacklight = true;
 	SetColor(255, 0, 155);
 	SetBrightness(255);
 	lcd.backlight(); // Turn on the backlight
-	LCDBacklight = true;
 	delay(100);
 	SensorUpdate();
-}
-
-void toggleLights(int state) {
-    if (state) {
-        LightsOn();
-    } else {
-        LightsOff();
-    }
 }
 
 void broadcastButtonState(int state) {
@@ -161,6 +154,24 @@ void broadcastButtonState(int state) {
     udp.beginPacket(broadcastIP, 12345);
     udp.write(state);
     udp.endPacket();
+}
+
+void toggleLights() {
+    if (FastLED.getBrightness() > 0) {
+        LightsOff();
+    	broadcastButtonState(0);
+    } else {
+        LightsOn();
+    	broadcastButtonState(1);
+    }
+}
+
+void toggleLightsUDP(int state) {
+    if (state) {
+        LightsOff();
+    } else {
+        LightsOn();
+    }
 }
 
 // ------ ############################################################ ------ //
@@ -174,7 +185,7 @@ void setup() {
 	LCDStart();
 	LCDBootScreen();
 
-	// Connect to WiFi network
+    // Connect to WiFi network
     Serial.println();
     Serial.println("Setting up Access Point...");
     WiFi.softAP(ssid, password);
@@ -206,12 +217,27 @@ void loop() {
 		}
     }
 
+	// Check if there are any UDP packets available
+    int packetSize = udp.parsePacket();
+    if (packetSize) {
+        // Read the packet into a buffer
+        char packetBuffer[255];
+        int len = udp.read(packetBuffer, 255);
+        if (len > 0) {
+            packetBuffer[len] = 0;
+        }
+        // Print the received packet
+        Serial.print("Received packet: ");
+        Serial.println(packetBuffer);
+        
+        toggleLightsUDP(packetBuffer[0]);
+    }
+
     int newButtonState = digitalRead(ledButton);
-    if (newButtonState != buttonState) {
+    if (newButtonState == LOW) {
         // Button state has changed
         buttonState = newButtonState;
-        broadcastButtonState(buttonState);
-        toggleLights(buttonState);
+        toggleLights();
         delay(250); // Debounce the button
     }
 }
