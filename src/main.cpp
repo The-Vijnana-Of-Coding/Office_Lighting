@@ -9,6 +9,8 @@ const uint8_t ledPin = 26;
 const uint8_t ledButton = 19;
 #define NUM_LEDS 110 // Define the number of LEDs in your strip
 short brightness;
+unsigned long previousMillis = 0;
+const long interval = 1000; // Interval in milliseconds (1 second)
 
 CRGB leds[NUM_LEDS];
 
@@ -22,6 +24,7 @@ int LCD_COLS=  20;
 int LCD_ROWS = 4;
 LiquidCrystal_I2C lcd(LCD_ADDR, LCD_COLS, LCD_ROWS);
 
+bool LCDBacklight = false;
 enum START_ROW
 {
 	beginning,
@@ -79,6 +82,7 @@ void LCDStart()
 {
 	lcd.init();
     lcd.backlight();
+	LCDBacklight = true;
     lcd.clear();
 }
 
@@ -110,14 +114,29 @@ void setBrightness(short brightnessLevel)
     FastLED.show();
 }
 
+void LightsOff()
+{
+	Serial.println("Lights are On, switching off now");
+	setBrightness(0);
+	lcd.clear();
+	lcd.noBacklight();		
+	LCDBacklight = false;
+}
+
+void LightsOn()
+{
+	Serial.println("Lights are Off, switching on now");
+	setColor(255, 0, 155);
+	setBrightness(255);
+	lcd.backlight(); // Turn on the backlight
+	LCDBacklight = true;
+}
+
 void toggleLights() {
     if (FastLED.getBrightness() > 0) {
-        Serial.println("Lights are On, switching off now");
-        setBrightness(0);
+        LightsOff();
     } else {
-        Serial.println("Lights are Off, switching on now");
-        setColor(255, 0, 155);
-        setBrightness(255);
+        LightsOn();
     }
 }
 
@@ -135,23 +154,31 @@ void setup() {
     sensors.begin(); 
 
 	delay(1000);
-    lcd.clear();
-
+	
 	pinMode(ledButton, INPUT_PULLUP);
 	FastLED.addLeds<WS2812B, ledPin, GRB>(leds, NUM_LEDS);
-	fill_solid(leds, NUM_LEDS, CRGB(0, 0, 0));
-	FastLED.show();
+	LightsOff();
 }
 
 // ------ ############################################################ ------ //
 
 void loop() {
-	SensorUpdate();
-	if(digitalRead(ledButton) == LOW)
-	{
-		toggleLights();
-	}
-    delay(1000); 
+	unsigned long currentMillis = millis();
+
+    // Check if it's time to update the sensor readings
+    if (currentMillis - previousMillis >= interval) {
+        previousMillis = currentMillis;
+		if(LCDBacklight)
+		{
+        	SensorUpdate();
+		}
+    }
+
+    // Check if the LED button is pressed
+    if (digitalRead(ledButton) == LOW) {
+        toggleLights();
+        delay(250); // Add a small delay to debounce the button
+    }
 }
 
 // ------ ############################################################ ------ //
