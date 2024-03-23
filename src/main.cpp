@@ -4,6 +4,12 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <FastLED.h>
+#include <WiFi.h>
+
+const char* ssid = "ESP32-AP";
+const char* password = "password"; // Change to suit your needs!
+
+WiFiServer server(80);
 
 const uint8_t ledPin = 26;
 const uint8_t ledButton = 19;
@@ -158,6 +164,15 @@ void setup() {
 	LCDStart();
 	LCDBootScreen();
 
+	// Set up WiFi access point
+	WiFi.softAP(ssid, password);
+	
+	IPAddress IP = WiFi.softAPIP();
+	Serial.print("AP IP address: ");
+	Serial.println(IP);
+	
+	server.begin();
+
     sensors.begin(); 
 
 	delay(1000);
@@ -170,6 +185,20 @@ void setup() {
 // ------ ############################################################ ------ //
 
 void loop() {
+	// Wait for a client to connect
+	WiFiClient client = server.available();
+	
+	if (client) {
+		Serial.println("Client connected");
+		
+		// Send data to the client
+		client.print("Hello from ESP32 AP");
+		
+		// Close the connection
+		client.stop();
+		Serial.println("Client disconnected");
+	}
+	
 	unsigned long currentMillis = millis();
 
     // Check if it's time to update the sensor readings
