@@ -5,13 +5,13 @@
 #include <DallasTemperature.h>
 
 #define ONE_WIRE_BUS 5 // Pin connected to DS18B20 data line
+
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
 int LCD_ADDR = 0x27;
 int LCD_COLS=  20;
 int LCD_ROWS = 4;
-
 LiquidCrystal_I2C lcd(LCD_ADDR, LCD_COLS, LCD_ROWS);
 
 enum START_ROW
@@ -21,6 +21,8 @@ enum START_ROW
 	end,
 	other
 };
+
+// ------ ############################################################ ------ //
 
 void LCDPrint(uint8_t line, uint8_t textStart, const char* text)
 {
@@ -55,11 +57,15 @@ void LCDPrint(uint8_t line, uint8_t textStart, const char* text)
 	}
 }
 
+// ------ ############################################################ ------ //
+
 void LCDBootScreen()
 {
 	LCDPrint(1, middle, "...Booting...");
 	LCDPrint(2, middle, "Please Wait");
 }
+
+// ------ ############################################################ ------ //
 
 void LCDStart()
 {
@@ -68,6 +74,25 @@ void LCDStart()
     lcd.clear();
 }
 
+// ------ ############################################################ ------ //
+
+void SensorUpdate()
+{
+    sensors.requestTemperatures(); 
+    float temperatureC = sensors.getTempCByIndex(0); // Read temperature in Celsius
+
+    String temperatureString = String(temperatureC, 1);
+    String output = "Temp: " + temperatureString + " C";
+    char charArray[output.length() + 1];
+    output.toCharArray(charArray, output.length() + 1);
+    LCDPrint(0, end, charArray);
+}
+
+// ------ ############################################################ ------ //
+// ------ ############################################################ ------ //
+// ------ ############################################################ ------ //
+
+
 void setup() {
     Wire.begin();
     Serial.begin(115200);
@@ -75,34 +100,20 @@ void setup() {
 	LCDStart();
 	LCDBootScreen();
 
-    sensors.begin(); // Initialize temperature sensor
+    sensors.begin(); 
 
 	delay(1000);
     lcd.clear();
 }
 
-void SensorUpdate()
-{
-    sensors.requestTemperatures(); // Request temperature readings
-    float temperatureC = sensors.getTempCByIndex(0); // Read temperature in Celsius
+// ------ ############################################################ ------ //
 
-    // Convert float to string
-    String temperatureString = String(temperatureC, 1);
-
-    // Concatenate the string
-    String output = "Temp: " + temperatureString + " C";
-
-    // Convert concatenated string to char array
-    char charArray[output.length() + 1];
-    output.toCharArray(charArray, output.length() + 1);
-
-    // Print to LCD
-    LCDPrint(0, end, charArray);
-
-    delay(1000); // Delay before taking the next temperature reading
-}
 
 void loop() {
 	SensorUpdate();
-    delay(1000); // Delay before taking the next temperature reading
+    delay(1000); 
 }
+
+// ------ ############################################################ ------ //
+// ------ ############################################################ ------ //
+// ------ ############################################################ ------ //
