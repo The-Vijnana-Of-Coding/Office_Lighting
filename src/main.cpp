@@ -5,6 +5,11 @@
 #include <DallasTemperature.h>
 #include <FastLED.h>
 #include <WiFi.h>
+#include <RTClib.h>
+
+RTC_DS3231 rtc;
+const long RTCinterval = 5000; // Interval in milliseconds (1 second)
+unsigned long previousRTCMillis = 0;
 
 const char* ssid = "your-ssid";
 const char* password = "your-password";
@@ -30,6 +35,8 @@ CRGB leds[NUM_LEDS];
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
+unsigned long previousLCDMillis = 0;
+const long LCDinterval = 5000; // Interval in milliseconds (1 second)
 int LCD_ADDR = 0x27;
 int LCD_COLS=  20;
 int LCD_ROWS = 4;
@@ -136,6 +143,7 @@ void LightsOff()
 	SetBrightness(0);
 	lcd.clear();
 	lcd.noBacklight();		
+	lastTempReading = 0.0;
 }
 
 void LightsOn()
@@ -146,7 +154,9 @@ void LightsOn()
 	SetBrightness(255);
 	lcd.backlight(); // Turn on the backlight
 	delay(100);
+	lastTempReading = 0.0;
 	SensorUpdate();
+	previousLCDMillis = millis();
 }
 
 void broadcastButtonState(int state) {
@@ -179,7 +189,6 @@ void toggleLightsUDP(int state) {
 // ------ ############################################################ ------ //
 
 void setup() {
-    Wire.begin();
     Serial.begin(115200);
 
 	LCDStart();
@@ -207,13 +216,48 @@ void setup() {
 
 void loop() {
 	unsigned long currentMillis = millis();
+	
+    if (currentMillis - previousRTCMillis >= RTCinterval) {
+        previousRTCMillis = millis();
 
-    // Check if it's time to update the sensor readings
+		if (!rtc.begin()) {
+			Serial.println("Couldn't find RTC");
+		}
+
+		if (rtc.lostPower()) {
+			Serial.println("RTC lost power, let's set the time!");
+			rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+		}
+		DateTime now = rtc.now();
+		Serial.print(now.year(), DEC);
+		Serial.print('/');
+		Serial.print(now.month(), DEC);
+		Serial.print('/');
+		Serial.print(now.day(), DEC);
+		Serial.print(" ");
+		Serial.print(now.hour(), DEC);
+		Serial.print(':');
+		Serial.print(now.minute(), DEC);
+		Serial.print(':');
+		Serial.print(now.second(), DEC);
+		Serial.println();
+    }
+	
     if (currentMillis - previousMillis >= interval) {
-        previousMillis = currentMillis;
+        previousMillis = millis();
 		if(LCDBacklight)
 		{
         	SensorUpdate();
+		}
+    }
+
+	if (currentMillis - previousLCDMillis >= LCDinterval) {
+        previousLCDMillis = millis();
+		if(LCDBacklight)
+		{
+			LCDBacklight = false;
+			lcd.clear();
+			lcd.noBacklight();		
 		}
     }
 
