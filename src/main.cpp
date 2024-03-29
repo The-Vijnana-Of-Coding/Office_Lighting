@@ -7,10 +7,14 @@
 #include <WiFi.h>
 #include <RTClib.h>
 
+const int RELAYCH1 = 16;
+
 RTC_DS3231 rtc;
 const long RTCinterval = 5000; // Interval in milliseconds (1 second)
 unsigned long previousRTCMillis = 0;
 
+bool alarmState = false;
+int alarmStartFlag = 0;
 const char* ssid = "your-ssid";
 const char* password = "your-password";
 const int ledButton = 19;
@@ -139,8 +143,8 @@ void SetBrightness(short brightnessLevel)
 void LightsOff()
 {
 	Serial.println("Lights are On, switching off now");
-	LCDBacklight = false;
 	SetBrightness(0);
+	LCDBacklight = false;
 	lcd.clear();
 	lcd.noBacklight();		
 	lastTempReading = 0.0;
@@ -159,20 +163,20 @@ void LightsOn()
 	previousLCDMillis = millis();
 }
 
-void broadcastButtonState(int state) {
+void BroadcastButtonState(int state) {
     // Broadcast button state to other devices
     udp.beginPacket(broadcastIP, 12345);
     udp.write(state);
     udp.endPacket();
 }
 
-void toggleLights() {
+void ToggleLights() {
     if (FastLED.getBrightness() > 0) {
         LightsOff();
-    	broadcastButtonState(0);
+    	BroadcastButtonState(0);
     } else {
         LightsOn();
-    	broadcastButtonState(1);
+    	BroadcastButtonState(1);
     }
 }
 
@@ -184,12 +188,58 @@ void toggleLightsUDP(int state) {
     }
 }
 
+void SunriseAlarm() {
+	static int transitionTime = 60 * 1000 * 10;  // 10 minutes in milliseconds
+	static CRGB startColor(155, 0, 0);  // Burnt Orange
+	static CRGB endColor(255, 255, 0);   // Bright Yellow
+
+	unsigned long currentTime = millis();
+
+	// Check if the transition is complete
+	if (currentTime - alarmStartFlag >= transitionTime) {
+		// Transition is complete, set a flag or perform any post-transition actions
+		alarmState = false;
+	} else {
+		// Calculate progress
+		float progress = float(currentTime - alarmStartFlag) / float(transitionTime);
+
+		// Calculate the current brightness (0 to 100)
+		int currentBrightness = int(progress * 100);
+
+		// Calculate the current color
+		CRGB currentColor = CRGB(
+		startColor.r + progress * (endColor.r - startColor.r),
+		startColor.g + progress * (endColor.g - startColor.g),
+		startColor.b + progress * (endColor.b - startColor.b)
+		);
+
+		FastLED.setBrightness(currentBrightness);  // Set the brightness
+		fill_solid(leds, NUM_LEDS, currentColor);
+		FastLED.show();
+	}
+}
+
 // ------ ############################################################ ------ //
 // ------ ############################################################ ------ //
 // ------ ############################################################ ------ //
 
 void setup() {
     Serial.begin(115200);
+    Wire.begin(); // Initialize the Wire interface
+
+	while (!rtc.begin()) {
+		Serial.println("Couldn't find RTC");
+		delay(2000);
+
+		if (rtc.lostPower()) {
+			Serial.println("RTC lost power, let's set the time!");
+			rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+		}
+	}
+
+	// Set the alarm to trigger once per day at a specific time
+	DateTime alarmTime = DateTime(rtc.now().year(), rtc.now().month(), rtc.now().day(), 7, 0, 0); // Set alarm time to 12:00:00
+	rtc.setAlarm1(alarmTime, DS3231_A1_Minute); 
 
 	LCDStart();
 	LCDBootScreen();
@@ -210,38 +260,44 @@ void setup() {
 	pinMode(ledButton, INPUT_PULLUP);
 	FastLED.addLeds<WS2812B, ledPin, GRB>(leds, NUM_LEDS);
 	LightsOff();
+
+	pinMode(RELAYCH1, OUTPUT);
 }
 
 // ------ ############################################################ ------ //
 
 void loop() {
 	unsigned long currentMillis = millis();
+	int newButtonState = digitalRead(ledButton);
 	
-    if (currentMillis - previousRTCMillis >= RTCinterval) {
-        previousRTCMillis = millis();
+	// Check if alarm has triggered
+	if (rtc.alarmFired(1)) {
+		Serial.println("Alarm triggered!");
+		alarmState = true;
+		alarmStartFlag = millis();
+		rtc.clearAlarm(1); // Clear the alarm flag
+	}
 
-		if (!rtc.begin()) {
-			Serial.println("Couldn't find RTC");
+	if(alarmState)
+	{
+		SunriseAlarm();
+	} 
+	
+	if (newButtonState == LOW) {
+        // Button state has changed
+        buttonState = newButtonState;
+		if(alarmState)
+		{
+			alarmState = false;
+		} 
+		else
+		{
+        	ToggleLights();
 		}
-
-		if (rtc.lostPower()) {
-			Serial.println("RTC lost power, let's set the time!");
-			rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-		}
-		DateTime now = rtc.now();
-		Serial.print(now.year(), DEC);
-		Serial.print('/');
-		Serial.print(now.month(), DEC);
-		Serial.print('/');
-		Serial.print(now.day(), DEC);
-		Serial.print(" ");
-		Serial.print(now.hour(), DEC);
-		Serial.print(':');
-		Serial.print(now.minute(), DEC);
-		Serial.print(':');
-		Serial.print(now.second(), DEC);
-		Serial.println();
+        delay(250); // Debounce the button
     }
+    
+	//digitalWrite(RELAYCH1, !digitalRead(RELAYCH1));
 	
     if (currentMillis - previousMillis >= interval) {
         previousMillis = millis();
@@ -251,15 +307,15 @@ void loop() {
 		}
     }
 
-	if (currentMillis - previousLCDMillis >= LCDinterval) {
-        previousLCDMillis = millis();
-		if(LCDBacklight)
-		{
-			LCDBacklight = false;
-			lcd.clear();
-			lcd.noBacklight();		
-		}
-    }
+	// if (currentMillis - previousLCDMillis >= LCDinterval) {
+    //     previousLCDMillis = millis();
+	// 	if(LCDBacklight)
+	// 	{
+	// 		LCDBacklight = false;
+	// 		lcd.clear();
+	// 		lcd.noBacklight();		
+	// 	}
+    // }
 
 	// Check if there are any UDP packets available
     int packetSize = udp.parsePacket();
@@ -275,14 +331,6 @@ void loop() {
         Serial.println(packetBuffer);
         
         toggleLightsUDP(packetBuffer[0]);
-    }
-
-    int newButtonState = digitalRead(ledButton);
-    if (newButtonState == LOW) {
-        // Button state has changed
-        buttonState = newButtonState;
-        toggleLights();
-        delay(250); // Debounce the button
     }
 }
 
